@@ -1,0 +1,59 @@
+#! /bin/bash
+
+# Distributed under the terms of the BSD 3-Clause license
+
+# Usage:
+# modmc <mod_dir> - add files in directory <mod_dir> to minecraft.jar
+#
+# Set the $JAR environment variable to the JAR archiver to use.  This must be
+# compatible with the Oracle archiver, and defaults to 'jar'.
+
+if [ -z "$1" ]; then
+    echo "error: need an argument" 1>&2
+    exit 1
+fi
+# use $JAR if set, else jar
+[ -z "$JAR" ] && JAR=jar
+
+olddir="`pwd`"
+mcdir=~/.minecraft/bin
+backupdir=~/.minecraft/mc-backup
+mkdir -p "$backupdir"
+srcdir="`dirname \"$1\"`/`basename \"$1\"`" # deal with trailing slash
+# error checking
+if ! [ -d "$srcdir" ]; then
+    echo "error: given argument is not a valid directory" 1>&2
+    exit 2
+fi
+if [ -z "`ls -A \"$srcdir\"`" ]; then
+    echo "error: given directory is empty" 1>&2
+    exit 2
+fi
+# create dir with old files
+rm -rf /tmp/mc
+mkdir -p /tmp/mc
+cd /tmp/mc
+if ! $JAR xf "$mcdir"/minecraft.jar; then
+    echo "error: couldn't extract minecraft.jar" 1>&2
+    rm -rf /tmp/mc
+    exit 3
+fi
+# add mod
+cd "$olddir"
+cp -r "$srcdir"/* /tmp/mc
+rm -r /tmp/mc/META-INF 2>/dev/null # might not exist
+# backup minecraft.jar
+mv "$mcdir"/minecraft.jar "$backupdir"/minecraft-`date +%Y%m%d%H%M%S`.jar
+# replace with new files
+cd /tmp/mc
+if ! $JAR cf "$mcdir"/minecraft.jar *; then
+    echo "error: couldn't create new minecraft.jar" 1>&2
+    # clean up before returning
+    rtn=3
+else
+    rtn=0
+fi
+# clean up
+cd "$olddir"
+rm -rf /tmp/mc
+exit $rtn

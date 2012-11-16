@@ -1,0 +1,29 @@
+#! /bin/bash
+
+# Distributed under the terms of the BSD 3-Clause license
+
+# Usage:
+# "when-connected <wait> <cmd> [<args...>]" - run "<cmd> [<args...>]" once
+#                                             NetworkManager reports an
+#                                             internet connection is available
+# wait: maximum time in seconds to wait for a connection (if exceeded, the
+#       command is not run)
+
+t=$1
+cmd=$2
+# error if time 0 or not an integer
+if ! [ "$t" -ne 0 ] 2> /dev/null; then
+    echo "error: expected non-zero time argument; got '$t'" 1>&2
+    exit 1
+fi
+if [ -z "$cmd" ]; then
+    echo "error: expected command to run; got '$cmd'" 1>&2
+    exit 1
+fi
+
+if nm-online -t $t -q; then
+    $cmd "${@:3}"
+    exit $?
+else
+    exit 1
+fi

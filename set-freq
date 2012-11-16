@@ -1,0 +1,20 @@
+#! /bin/bash
+
+# Distributed under the terms of the BSD 3-Clause license
+
+# Usage:
+# "set-freq" - list current and available CPU frequency governors
+# "set-freq <governor>" - use governor <governor>
+
+files=(/sys/devices/system/cpu/cpu*/cpufreq/scaling_governor)
+if [ -n "$1" ]; then
+    for f in ${files[@]}; do
+        echo -n "$1" > "$f"
+    done
+fi
+echo "    [current]"
+for f in ${files[@]}; do
+    cat "$f"
+done
+echo "    [available]"
+echo `cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_available_governors`

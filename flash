@@ -1,0 +1,20 @@
+#! /bin/bash
+
+# Usage:
+# "flash" - print all files with their numbers and sizes
+# "flash <num>" - print file <num>
+# "flash <num> <prog>" - open file <num> with program <prog>
+
+for pid in $(pgrep -f libflashplayer.so); do
+    ls -l /proc/$pid/fd/* | grep -io '\/.* /tmp/flash[[:alnum:]]\{8\}' | while read line; do
+        fn=$(echo $line | cut -d" " -f1)
+        num=$(echo $fn | cut -d"/" -f5)
+        if [ $1 ]; then if [ $1 -ne $num ]; then continue; fi; fi
+        if [ "$2" ]; then
+            $2 $fn
+            exit
+        else
+            echo $num $(du -hL $fn | cut -f1)
+        fi
+    done
+done

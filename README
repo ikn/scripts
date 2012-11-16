@@ -1,0 +1,4 @@
+Some scripts (Bash and Python).  Each is documented and has its own license.
+
+For Python scripts, you may need to edit the first line to point to your Python
+interpreter.

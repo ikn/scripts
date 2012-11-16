@@ -1,0 +1,14 @@
+#! /bin/bash
+
+# Distributed under the terms of the BSD 3-Clause license
+
+# Usage:
+# "fehview <file>" - view all images in <file>'s directory with feh
+
+if [ -z "$1" ]; then
+    f=`ls -Ap | grep -v / | head -n1`
+else
+    f="$1"
+fi
+d=`dirname "$f"`
+feh -d -g 1366x746 --start-at="$d/$(basename "$f")" "$d"

@@ -1,0 +1,27 @@
+#! /bin/bash
+
+# Distributed under the terms of the BSD 3-Clause license
+
+# Usage:
+# "respawn <cmd> <wait=0> [<success>]" - run <cmd> every <wait> seconds
+# success: if given, exit when the return code of cmd is not this
+
+cmd=$1
+wait=$2
+success=$3
+
+if [ -z "$cmd" ]; then
+    echo "expected command to run" 1>&2
+    exit 1
+fi
+# catches all cases: not an integer, no argument, < 0
+[ "$wait" -gt 0 ] 2> /dev/null || wait=0
+
+while true; do
+    eval $cmd
+    code=$?
+    if [ -n "$success" ]; then
+        [ $code -ne "$success" ] && exit 0
+    fi
+    sleep $wait
+done

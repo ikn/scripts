@@ -1,0 +1,225 @@
+#! /usr/bin/env python3
+
+# Distributed under the terms of the GNU General Public License, version 3
+
+# Usage:
+# "aur-sync [<packages...>]" - upgrade the given packages from AUR, else all
+#                              foreign packages
+# Options:
+#  -f: force reinstall/downgrade of up-to-date packages
+
+# TODO:
+# -d --download-only: download/extract, set as preserved and print paths
+# can create file containing patterns so that we always force for matching packages (eg. *-git)
+# dependency handling
+# -p --pause: pause after download/extract for making changes to package (wait for input)
+# ignore list
+# pause after build/before install to avoid sudo timeout
+
+from sys import argv
+import os
+import signal
+from subprocess import Popen, check_output
+import json
+from glob import glob
+import shutil
+import tarfile
+from urllib.request import urlopen
+from urllib.error import URLError
+from urllib.parse import urlencode
+
+BASE_URL = 'http://aur.archlinux.org'
+_WORKDIR = os.path.join(os.path.expanduser('~'), '.aur')
+WORKDIR = None
+CACHE = os.path.join(os.path.expanduser('~'), '.aurcache')
+
+processes = []
+
+
+def cleanup_workdir ():
+    if WORKDIR is None:
+        # not created yet
+        return
+    preserve = []
+    ds = glob(WORKDIR + os.sep + '*')
+    for d in ds:
+        if 'preserve' in os.listdir(d):
+            preserve.append(d)
+    if preserve:
+        for d in ds:
+            if d not in preserve:
+                shutil.rmtree(d)
+    elif os.path.exists(WORKDIR):
+        shutil.rmtree(WORKDIR)
+
+
+def quit (sig, frame):
+    print(processes)
+    for p in processes:
+        os.kill(p.pid)
+    for p in processes:
+        p.wait()
+    cleanup_workdir()
+    print('')
+    exit(1)
+
+
+def get (method, *args):
+    url = BASE_URL + '/rpc.php?'
+    get_args = [('type', method)]
+    if len(args) == 1:
+        get_args.append(('arg', args[0]))
+    else:
+        get_args += [('arg[]', arg) for arg in args]
+    try:
+        with urlopen(url + urlencode(get_args)) as request:
+            # json.load takes str, not bytes, so we have to use json.loads
+            page = json.loads(request.read().decode('latin_1'))
+    except URLError:
+        page = None
+    return page
+
+
+def ask (q):
+    try:
+        s = input(q + ' [Y/n] ')
+    except EOFError:
+        return False
+    if s and s.lower() != 'y':
+        return False
+    return True
+
+
+def install (pkg, path):
+    pkg_dir = os.path.join(WORKDIR, pkg)
+    if not os.path.exists(pkg_dir):
+        os.makedirs(pkg_dir)
+    # download
+    archive_url = BASE_URL + path
+    ext = '.'.join(os.path.basename(path).split('.')[1:])
+    archive = os.path.join(pkg_dir, pkg + '.' + ext)
+    try:
+        with urlopen(archive_url) as request:
+            with open(archive, 'wb') as f:
+                shutil.copyfileobj(request, f)
+    except URLError:
+        print('{}: couldn\'t download package'.format(pkg))
+        return False
+    # extract
+    if not tarfile.is_tarfile(archive):
+        print('{}: something wrong with tarball'.format(pkg))
+        return False
+    ar = tarfile.open(archive)
+    root_files = [f for f in ar.members if os.sep not in f.path]
+    if len(root_files) == 1:
+        # just a directory
+        ar.extractall(pkg_dir)
+        if len(root_files) == 1:
+            target = root_files[0].name
+        else:
+            target = ar.members[0].name
+            target = target[:target.find(os.sep)]
+        build_dir = os.path.join(pkg_dir, target)
+    else:
+        # extract everything to pkg_dir
+        build_dir = os.path.join(pkg_dir, pkg)
+        os.makedirs(build_dir)
+        ar.extractall(build_dir)
+    # build
+    p = Popen(('makepkg', '-sr'), cwd = build_dir)
+    processes.append(p)
+    if p.wait() != 0:
+        return False
+    # copy to cache
+    pkgs = glob(os.path.join(build_dir, '*.pkg.tar*'))
+    for pkg in pkgs:
+        shutil.copy(pkg, CACHE)
+    # install
+    if pkgs:
+        p = Popen(['sudo', 'pacman', '-U'] + pkgs)
+        processes.append(p)
+        if p.wait() != 0:
+            return False
+    return True
+
+def update (*want, force = False):
+    # get a list of wanted packages and current versions, if any
+    got = check_output((b'pacman', b'-Qm')).decode('latin_1').splitlines()
+    got = dict(pkg.split(' ') for pkg in got)
+    if len(want) == 0:
+        want = got
+    else:
+        want_got = {name: ver for name, ver in got.items() if name in want}
+        want = {name: want_got.get(name) for name in want}
+
+    # get AUR info for these packages
+    response = get('multiinfo', *want.keys())
+    if response is None:
+        print('error: AUR appears to be inaccessible')
+        return False
+    if response['type'] == 'error':
+        print('error:', response)
+        return False
+    current = {}
+    for pkg in response['results']:
+        current[pkg['Name']] = pkg
+
+    # get packages to update
+    pkgs = {}
+    for name, old_ver in want.items():
+        if name not in current:
+            print('warning: no such package \'{}\''.format(name))
+            continue
+        # compare versions
+        new_ver = current[name]['Version']
+        if old_ver is not None:
+            rtn = int(check_output((b'vercmp',  old_ver.encode('ascii'),
+                                    new_ver.encode('ascii'))))
+            if rtn == 0:
+                if force:
+                    msg = 'warning: reinstalling \'{}\' ({})'
+                    print(msg.format(name, old_ver))
+                else:
+                    continue
+            elif rtn > 0:
+                msg = 'warning: local version of \'{}\' is newer ({} -> {})'
+                print(msg.format(name, old_ver, new_ver))
+                continue
+        pkgs[name] = (old_ver, new_ver, current[name]['URLPath'])
+
+    # confirm
+    if not pkgs:
+        print('no packages to install')
+        return True
+    print('will install the following packages:')
+    for name, (old_ver, new_ver, path) in pkgs.items():
+        print('   ', name, '({} -> {})'.format(old_ver, new_ver))
+    if not ask('continue?'):
+        return True
+
+    # set up environment
+    global WORKDIR
+    WORKDIR = _WORKDIR
+    while os.path.exists(WORKDIR):
+        WORKDIR += '_'
+    os.makedirs(WORKDIR)
+    if not os.path.exists(CACHE):
+        os.makedirs(CACHE)
+
+    # install packages
+    for name, (old_ver, new_ver, path) in pkgs.items():
+        if not install(name, path):
+            msg = '{}: failed to build/install; skip removing temporary files?'
+            if ask(msg.format(name)):
+                with open(os.path.join(WORKDIR, name, 'preserve'), 'w'):
+                    pass
+
+    cleanup_workdir()
+
+
+signal.signal(signal.SIGTERM, quit)
+signal.signal(signal.SIGINT, quit)
+args = argv[1:]
+force = '-f' in args
+pkgs = [arg for arg in args if arg and arg[0] != '-']
+exit(0 if update(*pkgs, force = force) else 1)

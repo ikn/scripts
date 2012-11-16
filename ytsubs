@@ -1,0 +1,135 @@
+#! /usr/bin/env python2
+
+# Distributed under the terms of the GNU General Public License, version 3
+
+# Usage:
+# "ytsubs <username> [<password>]" - omit password to type it in without echo
+
+import sys
+import os
+from subprocess import check_call
+from time import strftime
+from urllib import urlencode
+from xml.etree.ElementTree import XML, ElementTree
+from getpass import getpass
+from signal import signal, SIGINT, SIGTERM
+
+from fetch import get, fetch_pages
+from htmlparse import HTMLTree
+
+home = os.path.expanduser('~') + os.sep
+urlbase = 'https://www.youtube.com'
+date_format = '%a, %d %b %Y %H:%M:%S %Z'
+feed_template = '''<?xml version="1.0"?>
+<rss version="2.0">
+    <channel>
+        <title>YouTube subscriptions</title>
+        <link>https://www.youtube.com/my_subscriptions</link>
+        <docs>http://blogs.law.harvard.edu/tech/rss</docs>
+        <lastBuildDate>{0}</lastBuildDate>
+    </channel>
+</rss>'''
+
+def login (u, p, c):
+    # get form fields
+    url = 'https://accounts.google.com/ServiceLogin?uilel=3&service=youtube&passive=true&continue=https%3A%2F%2Fwww.youtube.com%2Fsignin%3Faction_handle_signin%3Dtrue%26feature%3Dsign_in_button%26nomobiletemp%3D1%26hl%3Den_GB%26next%3D%252F&hl=en_GB&ltmpl=sso'
+    tree = HTMLTree(get(url, None, c, c))
+    inputs = tree.selection('#gaia_loginform input')
+    POST = {'Email': u, 'Passwd': p}
+    for i in inputs:
+        name = i.attrs['name']
+        if name not in POST:
+            POST[name] = i.attrs['value']
+    # log in
+    url = 'https://accounts.google.com/ServiceLoginAuth'
+    page = get(url, urlencode(POST), c, c)
+    return '<title>YouTube</title>' in page
+
+def parse_sub (page):
+    page = page[page.find('<div id="vm-video-list-container">'):]
+    page = page[:page.find('<div id="vm-pagination">')]
+    return HTMLTree(page)
+
+def get_sub_data (c):
+    # get main subscriptions page
+    url = 'https://www.youtube.com/my_subscriptions'
+    tree = HTMLTree(get(url, None, c, c))
+    # get individual subscription pages
+    links = tree.selection('#yt-admin-sidebar li a')
+    links = [a for a in links if a.attrs['id'] != 'vm-choosesub-newvideos']
+    urls = [urlbase + a.attrs['href'] for a in links]
+    names = [a.source() for a in links]
+    failed, trees = fetch_pages(urls, names = names, func = parse_sub, cookie = c)
+    # get video data
+    videos = {}
+    for t, chan in zip(trees, names):
+        imgs = t.selection('.vm-video-data .vm-thumb')
+        for img in reversed(imgs):
+            ID = img.selection('a')[0].attrs['href'][9:]
+            img = img.selection('.yt-thumb-clip-inner img')[0]
+            videos[ID] = (chan, img.attrs['title'])
+    return videos
+
+def add_items (fn, data, max_num = 50):
+    date = strftime(date_format)
+    try:
+        with open(fn) as f:
+            xml = XML(f.read())
+    except IOError:
+        # generate RSS feed
+        xml = XML(feed_template.format(date))
+        old = []
+    else:
+         # get list of existing items
+         old = [item.find('guid').text for item in xml[0].findall('item')]
+    channel = xml[0]
+    # remove existing items from new list
+    for ID in old:
+        try:
+            del data[ID]
+        except KeyError:
+            pass
+    # add new items
+    for ID, (chan, vid_title) in data.iteritems():
+        title = '\'{0}\' - {1}'.format(vid_title, chan)
+        url = urlbase + '/watch?v=' + str(ID)
+        s = '''
+        <item>
+            <title>{0}</title>
+            <link>{1}</link>
+            <description>{2}</description>
+            <pubDate>{3}</pubDate>
+            <guid>{4}</guid>
+        </item>'''.format(title, url, vid_title, date, ID)
+        channel.insert(4, XML(s))
+    # change build time
+    if data:
+        channel[3].text = date
+    # write out
+    ElementTree(xml).write(fn)
+
+def _del_cookie (cookie, rtn = 0):
+    try:
+        os.remove(cookie)
+    except OSError:
+        pass
+    sys.exit(rtn)
+
+if __name__ == '__main__':
+    if len(sys.argv) <= 1:
+        print 'error: expected username argument'
+        sys.exit(1)
+    elif len(sys.argv) <= 2:
+        pwd = getpass()
+    else:
+        pwd = sys.argv[2]
+    cookie = home + '.ytsubscookie'
+    del_cookie = lambda *args: _del_cookie(cookie, *args)
+    del_cookie_sig = lambda *args: _del_cookie(cookie)
+    signal(SIGINT, del_cookie_sig)
+    signal(SIGTERM, del_cookie_sig)
+    if not login(sys.argv[1], pwd, cookie):
+        print 'error: can\'t log in'
+        del_cookie(1)
+    add_items(home + '.ytsubsfeed.xml', get_sub_data(cookie))
+    del_cookie()
