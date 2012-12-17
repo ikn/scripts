@@ -10,6 +10,7 @@
 
 # TODO:
 # -d --download-only: download/extract, set as preserved and print paths
+# -o --open: if -d passed, open each path (with xdg-open)
 # can create file containing patterns so that we always force for matching packages (eg. *-git)
 # dependency handling
 # -p --pause: pause after download/extract for making changes to package (wait for input)
@@ -56,7 +57,7 @@ def cleanup_workdir ():
 def quit (sig, frame):
     print(processes)
     for p in processes:
-        os.kill(p.pid)
+        os.kill(p.pid, signal.SIGTERM)
     for p in processes:
         p.wait()
     cleanup_workdir()
@@ -142,6 +143,7 @@ def install (pkg, path):
             return False
     return True
 
+
 def update (*want, force = False):
     # get a list of wanted packages and current versions, if any
     got = check_output((b'pacman', b'-Qm')).decode('latin_1').splitlines()
@@ -182,9 +184,14 @@ def update (*want, force = False):
                 else:
                     continue
             elif rtn > 0:
-                msg = 'warning: local version of \'{}\' is newer ({} -> {})'
+                if force:
+                    msg = 'warning: downgrading \'{}\' ({} -> {})'
+                else:
+                    msg = 'warning: local version of \'{}\' is newer ({} -> ' \
+                          '{})'
                 print(msg.format(name, old_ver, new_ver))
-                continue
+                if not force:
+                    continue
         pkgs[name] = (old_ver, new_ver, current[name]['URLPath'])
 
     # confirm
