@@ -9,9 +9,8 @@
 #  -f: force reinstall/downgrade of up-to-date packages
 
 # TODO:
-# -d --download-only: download/extract, set as preserved and print paths
+# -d --download-only: download/extract, set as preserved and print paths (or pass paths)
 # -o --open: if -d passed, open each path (with xdg-open)
-# can create file containing patterns so that we always force for matching packages (eg. *-git)
 # dependency handling
 # -p --pause: pause after download/extract for making changes to package (wait for input)
 # ignore list
@@ -55,9 +54,12 @@ def cleanup_workdir ():
 
 
 def quit (sig, frame):
-    print(processes)
     for p in processes:
-        os.kill(p.pid, signal.SIGTERM)
+        try:
+            os.kill(p.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            # already ended
+            pass
     for p in processes:
         p.wait()
     cleanup_workdir()
@@ -81,14 +83,14 @@ def get (method, *args):
     return page
 
 
-def ask (q):
+def ask (q, default = True):
     try:
-        s = input(q + ' [Y/n] ')
+        s = input(q + (' [Y/n] ' if default else ' [y/N] '))
     except EOFError:
-        return False
-    if s and s.lower() != 'y':
-        return False
-    return True
+        return default
+    if s and s.lower() != ('n', 'y')[default]:
+        return not default
+    return default
 
 
 def install (pkg, path):
@@ -216,8 +218,8 @@ def update (*want, force = False):
     # install packages
     for name, (old_ver, new_ver, path) in pkgs.items():
         if not install(name, path):
-            msg = '{}: failed to build/install; skip removing temporary files?'
-            if ask(msg.format(name)):
+            msg = '{}: failed to build/install; remove temporary files?'
+            if not ask(msg.format(name), False):
                 with open(os.path.join(WORKDIR, name, 'preserve'), 'w'):
                     pass
 

@@ -42,8 +42,8 @@ def login (u, p, c):
             POST[name] = i.attrs['value']
     # log in
     url = 'https://accounts.google.com/ServiceLoginAuth'
-    page = get(url, urlencode(POST), c, c)
-    return '<title>YouTube</title>' in page
+    page, code, url = get(url, urlencode(POST), c, c, info = True)
+    return url == 'https://www.youtube.com/'
 
 def parse_sub (page):
     page = page[page.find('<div id="vm-video-list-container">'):]
