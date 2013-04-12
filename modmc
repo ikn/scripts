@@ -3,7 +3,8 @@
 # Distributed under the terms of the BSD 3-Clause license
 
 # Usage:
-# modmc <mod_dir> - add files in directory <mod_dir> to minecraft.jar
+# modmc <mod_dir> <mc_dir> - add files in directory <mod_dir> to
+#                            <mc_dir>/bin/minecraft.jar
 #
 # Set the $JAR environment variable to the JAR archiver to use.  This must be
 # compatible with the Oracle archiver, and defaults to 'jar'.
@@ -16,8 +17,13 @@ fi
 [ -z "$JAR" ] && JAR=jar
 
 olddir="`pwd`"
-mcdir=~/.minecraft/bin
-backupdir=~/.minecraft/mc-backup
+if [ -z "$2" ]; then
+    mcdir=~/.minecraft
+else
+    mcdir="$2"
+fi
+backupdir="$mcdir/mc-backup"
+mcdir="$mcdir/bin"
 mkdir -p "$backupdir"
 srcdir="`dirname \"$1\"`/`basename \"$1\"`" # deal with trailing slash
 # error checking
