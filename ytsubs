@@ -1,5 +1,7 @@
 #! /usr/bin/env python2
 
+# ytsubs 0.2
+
 # Distributed under the terms of the GNU General Public License, version 3
 
 # Requires the gdata-python-client (Python 2):
@@ -10,6 +12,8 @@
 
 # Prints the RSS feed to stdout (pipe it to a file or something).  At the
 # moment, videos are restricted to those published in the last 2 weeks.
+
+# TODO: remove feature= from URLs
 
 import sys
 import socket
