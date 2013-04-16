@@ -1,6 +1,6 @@
 #! /usr/bin/env python2
 
-# ytsubs 0.2
+# ytsubs 0.2.1
 
 # Distributed under the terms of the GNU General Public License, version 3
 
@@ -13,7 +13,7 @@
 # Prints the RSS feed to stdout (pipe it to a file or something).  At the
 # moment, videos are restricted to those published in the last 2 weeks.
 
-# TODO: remove feature= from URLs
+# TODO: nicer descriptions
 
 import sys
 import socket
@@ -22,6 +22,8 @@ from signal import signal, SIGINT, SIGTERM
 from getpass import getpass
 from xml.etree.ElementTree import XML, tostring as xml_to_string
 from xml.sax.saxutils import escape as escape_xml
+import urlparse
+from urllib import urlencode
 
 from gdata.youtube.service import YouTubeService
 from gdata import service as gservice
@@ -92,9 +94,16 @@ def mk_feed (vids):
     channel = xml[0]
     for t, v, sub in vids:
         title = '\'{0}\' - {1}'.format(v.title.text, sub)
-        url = v.link[0].href
+        guid = url = v.link[0].href
+        # remove all query string items from URL except video ID
+        url = urlparse.urlsplit(url)
+        qs = url.query
+        url = list(url)
+        url[url.index(qs)] = urlencode({'v': urlparse.parse_qs(qs)['v'][0]})
+        url = urlparse.urlunsplit(url)
+        # add as RSS item
         args = (title, url, v.content.text,
-                time.strftime(FEED_DATE_FORMAT, time.localtime(t)), url)
+                time.strftime(FEED_DATE_FORMAT, time.localtime(t)), guid)
         s = '''
         <item>
             <title>{0}</title>
