@@ -16,7 +16,8 @@
 # ignore list
 # pause after build/before install to avoid sudo timeout
 # sort package lists that get printed/used
-# detect date-style versions: don't warn on newer if so, and offer function to update all these
+# detect date-style versions: don't warn on newer if so, and offer function to update all these (with exceptions)
+# handle files with extra outer dir (trimage-git)
 
 from sys import argv
 import os

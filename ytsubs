@@ -1,6 +1,6 @@
 #! /usr/bin/env python2
 
-# ytsubs 0.2.1
+# ytsubs 0.2.2
 
 # Distributed under the terms of the GNU General Public License, version 3
 
@@ -13,7 +13,9 @@
 # Prints the RSS feed to stdout (pipe it to a file or something).  At the
 # moment, videos are restricted to those published in the last 2 weeks.
 
-# TODO: nicer descriptions
+# TODO:
+# - nicer descriptions (wrap in a <pre>)
+# - doesn't work for 'shows'?
 
 import sys
 import socket
@@ -93,7 +95,7 @@ def mk_feed (vids):
                                                  time.localtime())))
     channel = xml[0]
     for t, v, sub in vids:
-        title = '\'{0}\' - {1}'.format(v.title.text, sub)
+        title = '{0}: \'{1}\''.format(sub, v.title.text)
         guid = url = v.link[0].href
         # remove all query string items from URL except video ID
         url = urlparse.urlsplit(url)
