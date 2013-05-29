@@ -9,6 +9,7 @@
 #  -f: force reinstall/downgrade of up-to-date packages
 
 # TODO:
+# bash completion
 # -d --download-only: download/extract, set as preserved and print paths (or pass paths)
 # -o --open: if -d passed, open each path (with xdg-open)
 # dependency handling

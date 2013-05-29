@@ -1,6 +1,6 @@
 #! /usr/bin/env python2
 
-# ytsubs 0.2.2
+# ytsubs 0.2.5
 
 # Distributed under the terms of the GNU General Public License, version 3
 
@@ -14,8 +14,10 @@
 # moment, videos are restricted to those published in the last 2 weeks.
 
 # TODO:
-# - nicer descriptions (wrap in a <pre>)
 # - doesn't work for 'shows'?
+# - multiple pages of subscribers
+# - optionally don't take pw
+# - option for how far to go back (in __main__)
 
 import sys
 import socket
@@ -61,26 +63,24 @@ def login (user, pwd):
 
 def get_vids (yt, earliest):
     subs = yt.GetYouTubeSubscriptionFeed().entry
-    uri = 'http://gdata.youtube.com/feeds/api/users/{0}/uploads?' \
-          'start-index={1}'
+    uri = 'http://gdata.youtube.com/feeds/api/users/{0}/uploads'
     vids = []
     for sub in subs:
         name = sub.username.text
         err(name)
         this_vids = []
-        feed = None
-        while not this_vids or \
-              time.strptime(this_vids[-1].published.text, YT_DATE_FORMAT) < \
-              earliest:
-            # request more until we have all we want or every video
-            this_uri = uri.format(name, len(this_vids) + 1)
-            if feed is not None:
-                this_uri += '&max-results=' + feed.items_per_page.text
-            feed = yt.GetYouTubeVideoFeed(this_uri)
+        feed = yt.GetYouTubeVideoFeed(uri.format(name))
+        while True:
             this_vids += feed.entry
-            if len(this_vids) == int(feed.total_results.text):
-                # no more videos
+            t = time.strptime(this_vids[-1].published.text, YT_DATE_FORMAT)
+            if time.mktime(t) < earliest:
+               # got all the videos we want
                 break
+            # request more videos
+            link = feed.GetNextLink()
+            if link is None:
+                break
+            feed = yt.GetYouTubeSubscriptionFeed(link.href)
         for v in this_vids:
             t = time.mktime(time.strptime(v.published.text, YT_DATE_FORMAT))
             if t < earliest:
@@ -95,17 +95,24 @@ def mk_feed (vids):
                                                  time.localtime())))
     channel = xml[0]
     for t, v, sub in vids:
-        title = '{0}: \'{1}\''.format(sub, v.title.text)
-        guid = url = v.link[0].href
+        title = '{0}: \'{1}\''.format(sub, v.media.title.text)
+        url = v.media.player.url
         # remove all query string items from URL except video ID
         url = urlparse.urlsplit(url)
         qs = url.query
         url = list(url)
         url[url.index(qs)] = urlencode({'v': urlparse.parse_qs(qs)['v'][0]})
-        url = urlparse.urlunsplit(url)
+        guid = url = urlparse.urlunsplit(url)
         # add as RSS item
-        args = (title, url, v.content.text,
-                time.strftime(FEED_DATE_FORMAT, time.localtime(t)), guid)
+        desc = v.media.description.text
+        if desc:
+            desc = '<p>' + '</p>\n<p>'.join(desc.splitlines()) + '</p>'
+        else:
+            desc = ''
+        if v.media.thumbnail:
+            desc = '<img src="{0}">\n'.format(v.media.thumbnail[0].url) + desc
+        args = (title, url, desc,
+                time.strftime(FEED_DATE_FORMAT, time.gmtime(t)), guid)
         s = '''
         <item>
             <title>{0}</title>
