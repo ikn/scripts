@@ -1,6 +1,6 @@
 #! /usr/bin/env python2
 
-# ytsubs 0.2.5
+# ytsubs 0.2.6
 
 # Distributed under the terms of the GNU General Public License, version 3
 
@@ -10,14 +10,16 @@
 # Usage:
 # "ytsubs <username> [<password>]" - omit password to type it in without echo
 
+# Options:
+# -s DAYS, --start=DAYS
+#   how many days ago to start the feed at; defaults to 14
+
 # Prints the RSS feed to stdout (pipe it to a file or something).  At the
 # moment, videos are restricted to those published in the last 2 weeks.
 
 # TODO:
 # - doesn't work for 'shows'?
 # - multiple pages of subscribers
-# - optionally don't take pw
-# - option for how far to go back (in __main__)
 
 import sys
 import socket
@@ -28,6 +30,7 @@ from xml.etree.ElementTree import XML, tostring as xml_to_string
 from xml.sax.saxutils import escape as escape_xml
 import urlparse
 from urllib import urlencode
+from optparse import OptionParser
 
 from gdata.youtube.service import YouTubeService
 from gdata import service as gservice
@@ -132,21 +135,28 @@ if __name__ == '__main__':
     quit = lambda *args: sys.exit(0)
     signal(SIGINT, quit)
     signal(SIGTERM, quit)
-    # get details
-    if len(sys.argv) <= 1:
+    # parse arguments
+    op = OptionParser(prog = 'ytsubs',
+                      usage = 'ytsubs [options...] <username> [<password>]')
+    op.add_option('-s', '--start', action = 'store', type = 'int',
+                  metavar = 'DAYS', default = 14,
+                  help = 'how many days ago to start the feed at; defaults to '
+                         '14')
+    options, args = op.parse_args()
+    if len(args) < 1:
         err('error: expected username argument')
         sys.exit(1)
-    elif len(sys.argv) <= 2:
+    elif len(args) < 2:
         pwd = getpass()
     else:
-        pwd = sys.argv[2]
+        pwd = args[1]
     # do the stuff
     try:
-        yt = login(sys.argv[1], pwd)
+        yt = login(args[0], pwd)
         if yt is None:
             err('error: can\'t log in')
             sys.exit(1)
-        vids = get_vids(yt, time.time() - 60 * 60 * 24 * 7 * 2)
+        vids = get_vids(yt, time.time() - 60 * 60 * 24 * options.start)
     except socket.gaierror:
         err('error: can\'t connect to the YouTube service')
         sys.exit(1)

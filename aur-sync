@@ -12,13 +12,14 @@
 # bash completion
 # -d --download-only: download/extract, set as preserved and print paths (or pass paths)
 # -o --open: if -d passed, open each path (with xdg-open)
-# dependency handling
+# dependency handling; option to install asdep
 # -p --pause: pause after download/extract for making changes to package (wait for input)
 # ignore list
 # pause after build/before install to avoid sudo timeout
 # sort package lists that get printed/used
 # detect date-style versions: don't warn on newer if so, and offer function to update all these (with exceptions)
 # handle files with extra outer dir (trimage-git)
+# option to display PKGBUILD and pre/post install scripts before installing
 
 from sys import argv
 import os
