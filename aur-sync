@@ -6,7 +6,9 @@
 # "aur-sync [<packages...>]" - upgrade the given packages from AUR, else all
 #                              foreign packages
 # Options:
-#  -f: force reinstall/downgrade of up-to-date packages
+#  -f: force reinstall/downgrade of up-to-date or ignored packages
+#
+# The file ~/.aur-sync-ignore may contain packages to ignore, one per line.
 
 # TODO:
 # bash completion
@@ -14,7 +16,6 @@
 # -o --open: if -d passed, open each path (with xdg-open)
 # dependency handling; option to install asdep
 # -p --pause: pause after download/extract for making changes to package (wait for input)
-# ignore list (and -f forces for ignored)
 # -i --ignore=FILENAME
 # sort package lists that get printed/used
 # detect date-style versions: don't warn on newer if so, and offer function to update all these (with exceptions)
@@ -34,9 +35,11 @@ from urllib.error import URLError
 from urllib.parse import urlencode
 
 BASE_URL = 'http://aur.archlinux.org'
-_WORKDIR = os.path.join(os.path.expanduser('~'), '.aur')
+HOME = os.path.expanduser('~')
+_WORKDIR = os.path.join(HOME, '.aur')
 WORKDIR = None
-CACHE = os.path.join(os.path.expanduser('~'), '.aurcache')
+CACHE = os.path.join(HOME, '.aurcache')
+IGNORE_FILE = os.path.join(HOME, '.aur-sync-ignore')
 
 processes = []
 
@@ -149,7 +152,7 @@ def install (pkg, path):
         shutil.copy(pkg, CACHE)
     # install
     try:
-        input('package ready to install; press enter to continue ')
+        input('package built; press enter to continue with installation ')
     except EOFError:
         pass
     if pkgs:
@@ -182,6 +185,21 @@ def update (*want, force = False):
     for pkg in response['results']:
         current[pkg['Name']] = pkg
 
+    # get ignore list
+    ignore = []
+    try:
+        with open(IGNORE_FILE) as f:
+            lines = f.readlines()
+    except FileNotFoundError:
+        pass
+    except OSError:
+        print('warning: couldn\'t read from ignored packages file')
+    else:
+        for line in lines:
+            line = line.strip()
+            if line:
+                ignore.append(line)
+
     # get packages to update
     pkgs = {}
     for name, old_ver in want.items():
@@ -195,8 +213,8 @@ def update (*want, force = False):
                                     new_ver.encode('ascii'))))
             if rtn == 0:
                 if force:
-                    msg = 'warning: reinstalling \'{}\' ({})'
-                    print(msg.format(name, old_ver))
+                    print('warning: reinstalling \'{}\' ({})'
+                          .format(name, old_ver))
                 else:
                     continue
             elif rtn > 0:
@@ -208,6 +226,14 @@ def update (*want, force = False):
                 print(msg.format(name, old_ver, new_ver))
                 if not force:
                     continue
+        # check if ignored (only get here if want to install the package)
+        if name in ignore:
+            if force:
+                print('warning: installing ignored package \'{}\''
+                      .format(name))
+            else:
+                print('warning: ignoring \'{}\''.format(name))
+                continue
         pkgs[name] = (old_ver, new_ver, current[name]['URLPath'])
 
     # confirm
