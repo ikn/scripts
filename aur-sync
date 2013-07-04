@@ -14,14 +14,14 @@
 # -o --open: if -d passed, open each path (with xdg-open)
 # dependency handling; option to install asdep
 # -p --pause: pause after download/extract for making changes to package (wait for input)
-# ignore list
-# pause after build/before install to avoid sudo timeout
+# ignore list (and -f forces for ignored)
+# -i --ignore=FILENAME
 # sort package lists that get printed/used
 # detect date-style versions: don't warn on newer if so, and offer function to update all these (with exceptions)
 # handle files with extra outer dir (trimage-git)
 # option to display PKGBUILD and pre/post install scripts before installing
 
-from sys import argv
+from sys import argv, stderr
 import os
 import signal
 from subprocess import Popen, check_output
@@ -39,6 +39,10 @@ WORKDIR = None
 CACHE = os.path.join(os.path.expanduser('~'), '.aurcache')
 
 processes = []
+
+
+def print (*args, **kw):
+    __builtins__.print(*args, file = stderr, **kw)
 
 
 def cleanup_workdir ():
@@ -90,7 +94,8 @@ def get (method, *args):
 
 def ask (q, default = True):
     try:
-        s = input(q + (' [Y/n] ' if default else ' [y/N] '))
+        print(q, '[Y/n]' if default else '[y/N]', end = ' ')
+        s = input()
     except EOFError:
         return default
     if s and s.lower() != ('n', 'y')[default]:
@@ -143,6 +148,10 @@ def install (pkg, path):
     for pkg in pkgs:
         shutil.copy(pkg, CACHE)
     # install
+    try:
+        input('package ready to install; press enter to continue ')
+    except EOFError:
+        pass
     if pkgs:
         p = Popen(['sudo', 'pacman', '-U'] + pkgs)
         processes.append(p)
