@@ -16,11 +16,10 @@
 # -o --open: if -d passed, open each path (with xdg-open)
 # dependency handling; option to install asdep
 # -p --pause: pause after download/extract for making changes to package (wait for input)
-# -i --ignore=FILENAME
-# sort package lists that get printed/used
+# --ignore-file=FILENAME
+# -i --ignore=pkg1,pkg2
 # detect date-style versions: don't warn on newer if so, and offer function to update all these (with exceptions)
 #   (.+:)?\d{4}\.?\d{2}\.?\d{2}-.+
-# handle files with extra outer dir (trimage-git)
 # -s --show: display PKGBUILD and pre/post install scripts before installing ($EDITOR)
 
 from sys import argv, stderr
@@ -122,26 +121,31 @@ def install (pkg, path):
     except URLError:
         print('{}: couldn\'t download package'.format(pkg))
         return False
+
     # extract
     if not tarfile.is_tarfile(archive):
         print('{}: something wrong with tarball'.format(pkg))
         return False
     ar = tarfile.open(archive)
-    root_files = [f for f in ar.members if os.sep not in f.path]
-    if len(root_files) == 1:
+    # get files/dirs in the archive root
+    # dirs might not have entries of their own, only their children
+    root_names = set()
+    for f in ar.members:
+        name = f.name
+        if os.sep in name:
+            name = name[:name.find(os.sep)]
+        root_names.add(name)
+    print(root_names)
+    if len(root_names) == 1:
         # just a directory
         ar.extractall(pkg_dir)
-        if len(root_files) == 1:
-            target = root_files[0].name
-        else:
-            target = ar.members[0].name
-            target = target[:target.find(os.sep)]
-        build_dir = os.path.join(pkg_dir, target)
+        build_dir = os.path.join(pkg_dir, root_names.pop())
     else:
         # extract everything to pkg_dir
         build_dir = os.path.join(pkg_dir, pkg)
         os.makedirs(build_dir)
         ar.extractall(build_dir)
+
     # build
     p = Popen(('makepkg', '-sr'), cwd = build_dir)
     processes.append(p)
