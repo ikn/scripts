@@ -19,8 +19,9 @@
 # -i --ignore=FILENAME
 # sort package lists that get printed/used
 # detect date-style versions: don't warn on newer if so, and offer function to update all these (with exceptions)
+#   (.+:)?\d{4}\.?\d{2}\.?\d{2}-.+
 # handle files with extra outer dir (trimage-git)
-# option to display PKGBUILD and pre/post install scripts before installing
+# -s --show: display PKGBUILD and pre/post install scripts before installing ($EDITOR)
 
 from sys import argv, stderr
 import os
@@ -201,8 +202,8 @@ def update (*want, force = False):
                 ignore.append(line)
 
     # get packages to update
-    pkgs = {}
-    for name, old_ver in want.items():
+    pkgs = []
+    for name, old_ver in sorted(want.items()):
         if name not in current:
             print('warning: no such package \'{}\''.format(name))
             continue
@@ -234,14 +235,15 @@ def update (*want, force = False):
             else:
                 print('warning: ignoring \'{}\''.format(name))
                 continue
-        pkgs[name] = (old_ver, new_ver, current[name]['URLPath'])
+        pkgs.append((name, old_ver, new_ver, current[name]['URLPath']))
+    pkgs.sort()
 
     # confirm
     if not pkgs:
         print('no packages to install')
         return True
     print('will install the following packages:')
-    for name, (old_ver, new_ver, path) in pkgs.items():
+    for name, old_ver, new_ver, path in pkgs:
         print('   ', name, '({} -> {})'.format(old_ver, new_ver))
     if not ask('continue?'):
         return True
@@ -256,7 +258,7 @@ def update (*want, force = False):
         os.makedirs(CACHE)
 
     # install packages
-    for name, (old_ver, new_ver, path) in pkgs.items():
+    for name, old_ver, new_ver, path in pkgs:
         if not install(name, path):
             msg = '{}: failed to build/install; remove temporary files?'
             if not ask(msg.format(name), False):
