@@ -2,11 +2,8 @@
 
 # Distributed under the terms of the GNU General Public License, version 3
 
-# Usage:
-# "aur-sync [<packages...>]" - upgrade the given packages from AUR, else all
-#                              foreign packages
-# Options:
-#  -f: force reinstall/downgrade of up-to-date or ignored packages
+# Upgrade the given packages from AUR, else all foreign packages.  For options,
+# see "aur-sync -h".
 #
 # The file ~/.aur-sync-ignore may contain packages to ignore, one per line.
 
@@ -14,18 +11,17 @@
 # bash completion
 # -d --download-only: download/extract, set as preserved and print paths (or pass paths)
 # -o --open: if -d passed, open each path (with xdg-open)
-# dependency handling; option to install asdep
-# -p --pause: pause after download/extract for making changes to package (wait for input)
+# dependency handling; option to install asdep (-p --dep)
+# -e --edit: pause after download/extract for making changes to package (wait for input)
 # --ignore-file=FILENAME
 # -i --ignore=pkg1,pkg2
-# detect date-style versions: don't warn on newer if so, and offer function to update all these (with exceptions)
-#   (.+:)?\d{4}\.?\d{2}\.?\d{2}-.+
 # -s --show: display PKGBUILD and pre/post install scripts before installing ($EDITOR)
 
 from sys import argv, stderr
 import os
 import signal
 from subprocess import Popen, check_output
+from optparse import OptionParser
 import json
 from glob import glob
 import shutil
@@ -45,7 +41,7 @@ processes = []
 
 
 def print (*args, **kw):
-    __builtins__.print(*args, file = stderr, **kw)
+    __builtins__.print(*args, file=stderr, **kw)
 
 
 def cleanup_workdir ():
@@ -95,9 +91,9 @@ def get (method, *args):
     return page
 
 
-def ask (q, default = True):
+def ask (q, default=True):
     try:
-        print(q, '[Y/n]' if default else '[y/N]', end = ' ')
+        print(q, '[Y/n]' if default else '[y/N]', end=' ')
         s = input()
     except EOFError:
         return default
@@ -147,7 +143,7 @@ def install (pkg, path):
         ar.extractall(build_dir)
 
     # build
-    p = Popen(('makepkg', '-sr'), cwd = build_dir)
+    p = Popen(('makepkg', '-sr'), cwd=build_dir)
     processes.append(p)
     if p.wait() != 0:
         return False
@@ -168,7 +164,7 @@ def install (pkg, path):
     return True
 
 
-def update (*want, force = False):
+def update (*want, force=False):
     # get a list of wanted packages and current versions, if any
     got = check_output((b'pacman', b'-Qm')).decode('latin_1').splitlines()
     got = dict(pkg.split(' ') for pkg in got)
@@ -274,7 +270,17 @@ def update (*want, force = False):
 
 signal.signal(signal.SIGTERM, quit)
 signal.signal(signal.SIGINT, quit)
+
+op = OptionParser(prog='aur-sync', usage='aur-sync [options] [packages...]',
+                  description='Upgrade the given packages from AUR, else all '
+                              'foreign packages.')
+op.add_option('-f', '--force', action='store_true', dest='force',
+              help='force reinstall/downgrade of up-to-date or ignored '
+                   'packages')
+op.set_defaults(force=False)
+
+options, args = op.parse_args()
 args = argv[1:]
 force = '-f' in args
 pkgs = [arg for arg in args if arg and arg[0] != '-']
-exit(0 if update(*pkgs, force = force) else 1)
+exit(0 if update(*pkgs, force=options.force) else 1)
