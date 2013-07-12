@@ -2,16 +2,17 @@
 
 # Distributed under the terms of the GNU General Public License, version 3
 
-# Upgrade the given packages from AUR, else all foreign packages.  For options,
-# see "aur-sync -h".
+# Upgrade the given packages from AUR, else all foreign packages.  Built
+# packages are copied to ~/.aurcache/.
+
+# For options, run "aur-sync -h".
 
 # TODO:
 # bash completion
-# -d --download-only: download/extract, set as preserved and print paths (or pass paths)
 # -o --open: if -d passed, open each path (with xdg-open)
-# dependency handling; option to install asdep (-p --dep)
+# dependency handling
 # -e --edit: pause after download/extract for making changes to package (wait for input)
-# -s --show: display PKGBUILD and pre/post install scripts before installing ($EDITOR)
+# -s --show: display PKGBUILD and pre/post install scripts before installing ($EDITOR) (makepkg -o, makepkg -e)
 
 from sys import argv, stderr
 import os
@@ -40,6 +41,10 @@ def print (*args, **kw):
     __builtins__.print(*args, file=stderr, **kw)
 
 
+def print_stdout (*args, **kw):
+    __builtins__.print(*args, **kw)
+
+
 def cleanup_workdir ():
     if WORKDIR is None:
         # not created yet
@@ -55,6 +60,11 @@ def cleanup_workdir ():
                 shutil.rmtree(d)
     elif os.path.exists(WORKDIR):
         shutil.rmtree(WORKDIR)
+
+
+def set_preserved (name):
+    with open(os.path.join(WORKDIR, name, 'preserve'), 'w'):
+        pass
 
 
 def quit (sig, frame):
@@ -98,7 +108,7 @@ def ask (q, default=True):
     return default
 
 
-def install (pkg, path):
+def install (pkg, path, options):
     pkg_dir = os.path.join(WORKDIR, pkg)
     if not os.path.exists(pkg_dir):
         os.makedirs(pkg_dir)
@@ -127,7 +137,6 @@ def install (pkg, path):
         if os.sep in name:
             name = name[:name.find(os.sep)]
         root_names.add(name)
-    print(root_names)
     if len(root_names) == 1:
         # just a directory
         ar.extractall(pkg_dir)
@@ -138,8 +147,17 @@ def install (pkg, path):
         os.makedirs(build_dir)
         ar.extractall(build_dir)
 
+    # download/extract source
+    p = Popen(('makepkg', '-o'), cwd=build_dir)
+    processes.append(p)
+    if p.wait() != 0:
+        return False
+    if options.download_only:
+        set_preserved(pkg)
+        return '{}: downloaded to \'{}\''.format(pkg, pkg_dir)
+
     # build
-    p = Popen(('makepkg', '-sr'), cwd=build_dir)
+    p = Popen(('makepkg', '-esr'), cwd=build_dir)
     processes.append(p)
     if p.wait() != 0:
         return False
@@ -160,7 +178,7 @@ def install (pkg, path):
     return True
 
 
-def update (*want, force=False, ignore=[]):
+def update (*want, options=None):
     # get a list of wanted packages and current versions, if any
     got = check_output((b'pacman', b'-Qm')).decode('latin_1').splitlines()
     got = dict(pkg.split(' ') for pkg in got)
@@ -183,15 +201,17 @@ def update (*want, force=False, ignore=[]):
     for pkg in response['results']:
         current[pkg['Name']] = pkg
 
-    # add to ignore list from file
+    # generate ignore list
+    ignore = [pkg.strip() for pkg in options.ignore.split(',') if pkg.strip()]
+    ignore_file = os.path.expanduser(options.ignore_file)
     try:
-        with open(IGNORE_FILE) as f:
+        with open(ignore_file) as f:
             lines = f.readlines()
     except FileNotFoundError:
         pass
     except OSError:
         print('warning: couldn\'t read from ignored packages file (\'{}\')'.
-              format(IGNORE_FILE))
+              format(ignore_file))
     else:
         for line in lines:
             line = line.strip()
@@ -208,23 +228,23 @@ def update (*want, force=False, ignore=[]):
                 rtn = int(check_output((b'vercmp', old_ver.encode('ascii'),
                                         new_ver.encode('ascii'))))
                 if rtn == 0:
-                    if force:
+                    if options.force:
                         print('warning: reinstalling \'{}\' ({})'
                               .format(name, old_ver))
                     else:
                         continue
                 elif rtn > 0:
-                    if force:
+                    if options.force:
                         msg = 'warning: downgrading \'{}\' ({} -> {})'
                     else:
                         msg = 'warning: local version of \'{}\' is newer ' \
                               '({} -> {})'
                     print(msg.format(name, old_ver, new_ver))
-                    if not force:
+                    if not options.force:
                         continue
         # check if ignored (only get here if want to install the package)
         if name in ignore:
-            if force:
+            if options.force:
                 print('warning: installing ignored package \'{}\''
                       .format(name))
             else:
@@ -257,12 +277,20 @@ def update (*want, force=False, ignore=[]):
         os.makedirs(CACHE)
 
     # install packages
+    to_print = []
     for name, old_ver, new_ver, path in pkgs:
-        if not install(name, path):
+        # returns whether failed, possibly a string to print
+        rtn = install(name, path, options)
+        if not rtn:
             msg = '{}: failed to build/install; remove temporary files?'
             if not ask(msg.format(name), False):
-                with open(os.path.join(WORKDIR, name, 'preserve'), 'w'):
-                    pass
+                set_preserved(name)
+        elif isinstance(rtn, str):
+            to_print.append(rtn)
+    if to_print:
+        print_stdout()
+    for s in to_print:
+        print_stdout(s)
 
     cleanup_workdir()
     return True
@@ -284,9 +312,12 @@ op.add_option('--ignore-file', action='store', dest='ignore_file',
               metavar='FILENAME',
               help='file containing a list of packages to ignore, one per '
                    'line; defaults to ~/.aur-sync-ignore')
-op.set_defaults(force=False, ignore='', ignore_file=IGNORE_FILE)
+op.add_option('-d', '--download-only', action='store_true',
+              dest='download_only',
+              help='only download and extract packages, and print the paths '
+                   'to stdout')
+op.set_defaults(force=False, ignore='', ignore_file=IGNORE_FILE,
+                download_only=False)
 
 options, args = op.parse_args()
-ignore = [pkg.strip() for pkg in options.ignore.split(',')]
-IGNORE_FILE = os.path.expanduser(options.ignore_file)
-exit(0 if update(*args, force=options.force, ignore=ignore) else 1)
+exit(0 if update(*args, options=options) else 1)
