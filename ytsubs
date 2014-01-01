@@ -18,6 +18,7 @@
 
 # FIXME: doesn't work for 'shows'
 #        <https://code.google.com/p/gdata-issues/issues/detail?id=4605>
+#  - .total_results shows they exist, though (!= len())
 
 import sys
 import socket

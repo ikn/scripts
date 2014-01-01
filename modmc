@@ -23,7 +23,6 @@ else
     mcdir="$2"
 fi
 backupdir="$mcdir/mc-backup"
-mcdir="$mcdir/bin"
 mkdir -p "$backupdir"
 srcdir="`dirname \"$1\"`/`basename \"$1\"`" # deal with trailing slash
 # error checking
@@ -39,7 +38,8 @@ fi
 rm -rf /tmp/mc
 mkdir -p /tmp/mc
 cd /tmp/mc
-if ! $JAR xf "$mcdir"/minecraft.jar; then
+jar="$mcdir"/$(ls "$mcdir" | grep "\.jar")
+if ! $JAR xf "$jar"; then
     echo "error: couldn't extract minecraft.jar" 1>&2
     rm -rf /tmp/mc
     exit 3
@@ -49,10 +49,10 @@ cd "$olddir"
 cp -r "$srcdir"/* /tmp/mc
 rm -r /tmp/mc/META-INF 2>/dev/null # might not exist
 # backup minecraft.jar
-mv "$mcdir"/minecraft.jar "$backupdir"/minecraft-`date +%Y%m%d%H%M%S`.jar
+mv "$jar" "$backupdir"/minecraft-`date +%Y%m%d%H%M%S`.jar
 # replace with new files
 cd /tmp/mc
-if ! $JAR cf "$mcdir"/minecraft.jar *; then
+if ! $JAR cf "$jar" *; then
     echo "error: couldn't create new minecraft.jar" 1>&2
     # clean up before returning
     rtn=3

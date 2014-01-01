@@ -12,7 +12,12 @@
 # -o --open: if -d passed, open each path (with xdg-open)
 # dependency handling
 # -e --edit: pause after download/extract for making changes to package (wait for input)
-# -s --show: display PKGBUILD and pre/post install scripts before installing ($EDITOR) (makepkg -o, makepkg -e)
+# -s --show: display PKGBUILD and pre/post install scripts before starting ($EDITOR || $PAGER)
+#   -n --new: only for new packages
+# on failure, offer [y/N/retry]
+# on -f, don't install ignored package if not installed
+# don't print warnings for ignored packages
+# use cache
 
 from sys import argv, stderr
 import os
