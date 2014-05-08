@@ -8,6 +8,7 @@
 # For options, run "aur-sync -h".
 
 # TODO:
+# aur search
 # bash completion
 # -o --open: if -d passed, open each path (with xdg-open)
 # dependency handling
@@ -18,6 +19,7 @@
 # on -f, don't install ignored package if not installed
 # don't print warnings for ignored packages
 # use cache
+# configurable BASE_URL
 
 from sys import argv, stderr
 import os
