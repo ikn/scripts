@@ -7,12 +7,22 @@
 #                                  or in a new one
 
 # use any uzbl to reach the event manager
-fifo="$(find /tmp -user "$UID" -name 'uzbl_fifo_*' 2> /dev/null | tail -n 1)"
-if [ -p "$fifo" ]; then
-    for uri in "$@"; do
-        echo "event new_tab $uri" > "$fifo"
-    done
-    echo "event bring_to_front" > "$fifo"
-else
-    exec uzbl-tabbed "$@"
-fi
+finished=
+while read -r fifo; do
+    # check that an uzbl process is still running for this FIFO
+    echo $fifo $finished
+    pid="${fifo#/tmp/uzbl_fifo_}"
+    pid="${pid%%-*}"
+
+    if [ -p "$fifo" ] && [ -n "$(ps -p "$pid" -o pid=)" ]; then
+        for uri in "$@"; do
+            echo "event new_tab $uri" > "$fifo"
+        done
+        echo "event bring_to_front" > "$fifo"
+
+        finished=y
+        break
+    fi
+done < <(find /tmp -user "$UID" -name 'uzbl_fifo_*' 2> /dev/null)
+
+[ -z "$finished" ] && exec uzbl-tabbed "$@"
