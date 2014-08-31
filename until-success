@@ -3,15 +3,15 @@
 # Distributed under the terms of the BSD 3-Clause license
 
 # Usage:
-# "until-success <wait> <cmd> [<args...>]" - run "<cmd> [<args...>]" every
-#                                            <wait> seconds until it succeeds
+# "until-success <retries> <cmd> [<args...>]"
+#   - run "<cmd> [<args...>]" at most <retries> times, until it succeeds
 
 n="$1"
 prog="$2"
 shift 2
 while true; do
     "$prog" "$@" && break
-    n=$[n-1]
+    n="$((n-1))"
     echo "failed; $n attempts remaining"
-    [ "$n" -eq 0 ] && break
+    [ "$n" -le 0 ] && break
 done

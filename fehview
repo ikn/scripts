@@ -11,4 +11,4 @@ else
     f="$1"
 fi
 d=`dirname "$f"`
-feh -d -g 1920x1058 --start-at="$d/$(basename "$f")" "$d"
+feh --scale-down --draw-filename --draw-tinted --start-at="$d/$(basename "$f")" "$d"

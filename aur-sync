@@ -155,7 +155,7 @@ def install (pkg, path, options):
         ar.extractall(build_dir)
 
     # download/extract source
-    p = Popen(('makepkg', '-o'), cwd=build_dir)
+    p = Popen(('makepkg', '-osr'), cwd=build_dir)
     processes.append(p)
     if p.wait() != 0:
         return False
