@@ -8,6 +8,7 @@
 # For options, run "aur-sync -h".
 
 # TODO:
+# fails with `pacman -Qm` empty
 # aur search
 # bash completion
 # -o --open: if -d passed, open each path (with xdg-open)

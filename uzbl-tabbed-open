@@ -6,23 +6,29 @@
 # "uzbl-tabbed-open [<uris...>]" - open uris in existing uzbl-tabbed instance
 #                                  or in a new one
 
+if [ "$#" -eq 0 ]; then
+    uzbl-tabbed
+else
 # use any uzbl to reach the event manager
-finished=
-while read -r fifo; do
-    # check that an uzbl process is still running for this FIFO
-    echo $fifo $finished
-    pid="${fifo#/tmp/uzbl_fifo_}"
-    pid="${pid%%-*}"
+    finished=
+    while read -r fifo; do
+        # check that an uzbl process is still running for this FIFO
+        echo $fifo $finished
+        pid="${fifo#/tmp/uzbl_fifo_}"
+        pid="${pid%%-*}"
 
-    if [ -p "$fifo" ] && [ -n "$(ps -p "$pid" -o pid=)" ]; then
-        for uri in "$@"; do
-            echo "event new_tab $uri" > "$fifo"
-        done
-        echo "event bring_to_front" > "$fifo"
+        if [ -p "$fifo" ] && [ -n "$(ps -p "$pid" -o pid=)" ]; then
+            for uri in "$@"; do
+                echo "event new_tab $uri" > "$fifo"
+            done
+            echo "event bring_to_front" > "$fifo"
 
-        finished=y
-        break
+            finished=y
+            break
+        fi
+    done < <(find /tmp -user "$UID" -name 'uzbl_fifo_*' 2> /dev/null)
+
+    if [ -z "$finished" ]; then
+        exec uzbl-tabbed "$@"
     fi
-done < <(find /tmp -user "$UID" -name 'uzbl_fifo_*' 2> /dev/null)
-
-[ -z "$finished" ] && exec uzbl-tabbed "$@"
+fi

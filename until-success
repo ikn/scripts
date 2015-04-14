@@ -13,5 +13,5 @@ while true; do
     "$prog" "$@" && break
     n="$((n-1))"
     echo "failed; $n attempts remaining"
-    [ "$n" -le 0 ] && break
+    [ "$n" -le 0 ] && exit 1
 done
