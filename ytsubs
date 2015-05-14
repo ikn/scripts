@@ -1,6 +1,6 @@
 #! /usr/bin/env python3
 
-# ytsubs 0.3.0
+# ytsubs 0.3.1
 
 # Distributed under the terms of the GNU General Public License, version 3
 
@@ -23,7 +23,7 @@ import urllib, urllib.request
 from xml.sax.saxutils import escape as escape_xml
 
 PROGRAM = 'ytsubs'
-VERSION = '0.3.0'
+VERSION = '0.3.1'
 
 PAGE_LIMIT = 50
 YT_BASE_URL = 'https://www.youtube.com'
@@ -99,7 +99,8 @@ Returns an iterator over sequences of items.
 
 def mk_video_url (video_id):
     """Return the URL to a video on YouTube given its ID."""
-    return '{}?{}'.format(YT_BASE_URL, urllib.parse.urlencode({'v': video_id}))
+    return '{}/watch?{}'.format(YT_BASE_URL,
+                                urllib.parse.urlencode({'v': video_id}))
 
 
 def feed_start ():
@@ -508,8 +509,8 @@ using a username.''')
     args = p.parse_args()
 
     yt = YouTubeClient(args.apikey)
-    out_file = sys.stdout
-    out_file.write(feed_start())
+    out_file = sys.stdout.buffer
+    out_file.write(feed_start().encode('utf-8'))
     for video in get_videos(yt, args.subs_channel, args.max_age):
-        out_file.write(feed_video(video))
-    out_file.write(feed_end())
+        out_file.write(feed_video(video).encode('utf-8'))
+    out_file.write(feed_end().encode('utf-8'))
