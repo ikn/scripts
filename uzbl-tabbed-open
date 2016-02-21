@@ -13,7 +13,6 @@ else
     finished=
     while read -r fifo; do
         # check that an uzbl process is still running for this FIFO
-        echo $fifo $finished
         pid="${fifo#/tmp/uzbl_fifo_}"
         pid="${pid%%-*}"
 
