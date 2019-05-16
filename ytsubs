@@ -1,14 +1,12 @@
 #! /usr/bin/env python3
 
-# ytsubs 0.3.1
+# ytsubs 0.3.2
 
 # Distributed under the terms of the GNU General Public License, version 3
 
 # Requires Python 3, version 3.2 or later 3.x.
 
 # TODO
-# - don't assume sorting when filtering by date - but there are no
-#   filtering/sorting options in the APIs
 # - parallelisation
 
 import sys
@@ -361,7 +359,8 @@ def get_channels_upload_playlist_ids (yt, channel_ids):
 yt: YouTubeClient
 channel_ids: sequence of channel IDs or usernames
 
-Returns an iterator over playlist IDs.
+Returns an iterator over playlist descriptors - dicts with keys 'channel id',
+'channel title', 'id'.
 
 """
     channel_items = list(yt.req_paginate('channels', {
@@ -381,11 +380,14 @@ Returns an iterator over playlist IDs.
     )
 
     for channel_item in channel_items:
-        yield (
-            walk_item('channel', channel_item, ['snippet', 'title']),
-            walk_item('channel', channel_item,
-                      ['contentDetails', 'relatedPlaylists', 'uploads'])
-        )
+        yield {
+            k: walk_item('channel', channel_item, path)
+            for k, path in {
+                'channel id': ['id'],
+                'channel title': ['snippet', 'title'],
+                'id': ['contentDetails', 'relatedPlaylists', 'uploads'],
+            }.items()
+        }
 
 
 def get_channels_uploads (yt, channel_ids, include_video):
@@ -402,27 +404,33 @@ Returns an iterator over video descriptors - dicts with keys 'channel',
 'thumb w' and 'thumb h'.
 
 """
-    for channel_title, playlist_id in (
+    thumb_path = ['snippet', 'thumbnails', THUMB_QUALITY]
+
+    for playlist_item in (
         get_channels_upload_playlist_ids(yt, channel_ids)
     ):
-        for video_item in yt.req_paginate('playlistItems', {
+        for video_item in yt.req_paginate('search', {
+            'channelId': playlist_item['channel id'],
+            'playlistId': playlist_item['id'],
+            'type': 'video',
             'part': 'snippet',
-            'playlistId': playlist_id,
+            'order': 'date',
+            'safeSearch': 'none',
         }):
             video = {
-                k: walk_item('video', video_item, ['snippet'] + path)
+                k: walk_item('video', video_item, path)
                 for k, path in {
-                    'published': ['publishedAt'],
-                    'title': ['title'],
-                    'description': ['description'],
-                    'id': ['resourceId', 'videoId'],
-                    'thumb url': ['thumbnails', THUMB_QUALITY, 'url'],
-                    'thumb w': ['thumbnails', THUMB_QUALITY, 'width'],
-                    'thumb h': ['thumbnails', THUMB_QUALITY, 'height'],
+                    'published': ['snippet', 'publishedAt'],
+                    'title': ['snippet', 'title'],
+                    'description': ['snippet', 'description'],
+                    'id': ['id', 'videoId'],
+                    'thumb url': thumb_path + ['url'],
+                    'thumb w': thumb_path + ['width'],
+                    'thumb h': thumb_path + ['height'],
                 }.items()
             }
 
-            video['channel'] = channel_title
+            video['channel'] = playlist_item['channel title']
             try:
                 video['published'] = time.strptime(
                     video['published'], YT_DATE_FORMAT)
