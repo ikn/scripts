@@ -7,7 +7,11 @@
 
 # Takes no arguments.
 
-cmp_dir=/opt/Dustforce/content/levels3
+# Environment variables:
+#  - DUSTFORCE_INSTALL_DIR: path where Dustforce is installed
+#                           (default: /opt/Dustforce)
+
+cmp_dir="${DUSTFORCE_INSTALL_DIR:-/opt/Dustforce}"/content/levels3
 local_dir=~/.HitboxTeam/Dustforce/user/levels
 
 if [ -L "$local_dir" ]; then
@@ -18,14 +22,14 @@ if [ -L "$local_dir" ]; then
 
     if [ -z "$(find "$cmp_dir" -not -user root -print -quit)" ]; then
         echo >&2 "only original levels remain"
-        sudo chmod o-w /opt/Dustforce/content/levels3/
+        sudo chmod o-w "$cmp_dir"
     else
         echo >&2 "some custom levels remain"
     fi
 
 else
     echo >&2 "set up"
-    sudo chmod o+w /opt/Dustforce/content/levels3/
+    sudo chmod o+w "$cmp_dir"
     mv "$local_dir"/* "$cmp_dir"
     rmdir "$local_dir"
     ln -s "$cmp_dir" "$local_dir"
