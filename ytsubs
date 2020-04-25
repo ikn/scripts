@@ -1,6 +1,6 @@
 #! /usr/bin/env python3
 
-# ytsubs 0.3.2
+# ytsubs 0.3.3
 
 # Distributed under the terms of the GNU General Public License, version 3
 
@@ -21,11 +21,14 @@ import urllib, urllib.request
 from xml.sax.saxutils import escape as escape_xml
 
 PROGRAM = 'ytsubs'
-VERSION = '0.3.1'
+VERSION = '0.3.3'
 
 PAGE_LIMIT = 50
 YT_BASE_URL = 'https://www.youtube.com'
-YT_DATE_FORMAT = '%Y-%m-%dT%H:%M:%S.000Z'
+YT_DATE_FORMATS = (
+    '%Y-%m-%dT%H:%M:%S.000Z',
+    '%Y-%m-%dT%H:%M:%SZ',
+)
 THUMB_QUALITY = 'medium'
 FEED_DATE_FORMAT = '%a, %d %b %Y %H:%M:%S %Z'
 FEED_START_TEMPLATE = '''<?xml version="1.0"?>
@@ -206,6 +209,18 @@ expect_code: specific string error code expected ('reason' in 'errors' array)
         return False
     else:
         return code == expect_code
+
+
+def parse_yt_date (date):
+    for fmt in YT_DATE_FORMATS:
+        try:
+            return time.strptime(date, fmt)
+        except ValueError as e:
+            pass
+    # nothing matched
+    raise ValueError(
+        '{} doesn\'t match any known format: {}'.format(
+            repr(date), ', '.join(map(repr, YT_DATE_FORMATS))))
 
 
 class YouTubeClient:
@@ -432,8 +447,7 @@ Returns an iterator over video descriptors - dicts with keys 'channel',
 
             video['channel'] = playlist_item['channel title']
             try:
-                video['published'] = time.strptime(
-                    video['published'], YT_DATE_FORMAT)
+                video['published'] = parse_yt_date(video['published'])
             except ValueError as e:
                 raise BadResponse('video publish date', e)
 
