@@ -1,0 +1,114 @@
+#! /usr/bin/env bash
+
+# Distributed under the terms of the BSD 3-Clause license
+
+# Set the mouse resolution, for mice supported by libratbag.  Depends on
+# libratbag.  Only supports setting resolutions already configured in the active
+# profile, and always uses the first device listed.
+
+# Usage:
+# "set-mouse-resolution <resolution>"
+
+BASE_PATH=/org/freedesktop/ratbag1
+
+err () {
+    echo >&2 error: "$@"
+    exit 1
+}
+
+send-message () {
+    dbus-send --system --print-reply --dest=org.freedesktop.ratbag1 "$@" | {
+        read || return 0 # drop first line; skip if empty reply
+
+        local -a words
+        read -r -a words
+        local last_word="${words[ ${#words[@]} - 1 ]}"
+
+        if [ "${words[ ${#words[@]} - 2 ]}" = array ] &&
+            [ "$last_word" = "[" ]
+        then
+            while read -r -a words; do
+                local last_word="${words[ ${#words[@]} - 1 ]}"
+                if [ "${#words[@]}" -eq 1 ] && [ "$last_word" = "]" ]; then
+                    # array end
+                    true
+                else
+                    echo "$last_word"
+                fi
+            done
+
+        else
+            echo "$last_word"
+        fi
+
+    } | {
+        local value
+        while read -r value; do
+            if [ "${value:0:1}" = "\"" ] && [ "${value:${#value} - 1}" = "\"" ]
+            then
+                echo "${value:1:-1}"
+            else
+                echo "$value"
+            fi
+        done
+    }
+
+    return "${PIPESTATUS[0]}"
+}
+
+get-property () {
+    local path="$1"
+    local interface="$2"
+    local name="$3"
+    send-message "$path" org.freedesktop.DBus.Properties.Get \
+        string:org.freedesktop.ratbag1."$interface" string:"$name"
+}
+
+call-method () {
+    local path="$1"
+    local interface="$2"
+    local method="$3"
+    send-message > /dev/null \
+        "$path" org.freedesktop.ratbag1."$interface"."$method"
+}
+
+target_resolution="$1"
+[ -n "$target_resolution" ] || err "expected argument: target resolution"
+
+device_path="$(get-property "$BASE_PATH" Manager Devices)" ||
+    err "failed getting devices"
+[ -n "$device_path" ] || err "no devices found"
+
+reply="$(get-property "$device_path" Device Profiles)" ||
+    err "failed getting device $device_path profiles"
+profile_found=
+while read -r profile_path; do
+    reply="$(get-property "$profile_path" Profile IsActive)" ||
+        err "failed getting profile $profile_path state"
+    [ "$reply" = true ] || continue
+
+    reply="$(get-property "$profile_path" Profile Resolutions)" ||
+        err "failed getting profile $profile_path resolutions"
+    resolution_found=
+    while read -r resolution_path; do
+        resolution="$(get-property "$resolution_path" Resolution Resolution)" ||
+            err "failed getting resolution $resolution_path value"
+        [ "$resolution" -eq "$target_resolution" ] || continue
+
+        call-method "$resolution_path" Resolution SetActive ||
+            err "failed making resolution $resolution_path active"
+        call-method "$device_path" Device Commit ||
+            err "failed committing device $device_path changes"
+
+        resolution_found=y
+        break
+    done <<<"$reply"
+
+    [ "$resolution_found" = y ] ||
+        err "resolution $target_resolution not found in the active profile"
+
+    profile_found=y
+    break
+done <<<"$reply"
+
+[ "$profile_found" = y ] || "no active profile found for device $device_path"
