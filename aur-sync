@@ -8,7 +8,6 @@
 # For options, run "aur-sync -h".
 
 # TODO:
-# fails with `pacman -Qm` empty
 # aur search
 # bash completion
 # -o --open: if -d passed, open each path (with xdg-open)
@@ -21,6 +20,8 @@
 # don't print warnings for ignored packages
 # use cache
 # configurable BASE_URL
+# only install package from file with the expected name (split packages)
+# hangs if interrupt during install
 
 from sys import argv, stderr
 import os
@@ -89,18 +90,14 @@ def quit (sig, frame):
     exit(1)
 
 
-def get (method, *args):
-    url = BASE_URL + '/rpc.php?'
-    get_args = [('type', method)]
-    if len(args) == 1:
-        get_args.append(('arg', args[0]))
-    else:
-        get_args += [('arg[]', arg) for arg in args]
+def lookup (*names):
+    url = BASE_URL + '/rpc/?'
+    args = [('v', '5'), ('type', 'info')] + [('arg[]', name) for name in names]
     try:
-        with urlopen(url + urlencode(get_args)) as request:
+        with urlopen(url + urlencode(args)) as request:
             # json.load takes str, not bytes, so we have to use json.loads
             page = json.loads(request.read().decode('latin_1'))
-    except URLError:
+    except URLError as e:
         page = None
     return page
 
@@ -198,7 +195,7 @@ def update (*want, options=None):
         want = got
 
     # get AUR info for these packages
-    response = get('multiinfo', *want.keys())
+    response = lookup(*want.keys())
     if response is None:
         print('error: AUR appears to be inaccessible')
         return False
